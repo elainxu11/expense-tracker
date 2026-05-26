@@ -1,5 +1,34 @@
 import { Category } from './types';
 
+const AMEX_CATEGORY_MAP: Record<string, Category> = {
+  'Restaurant-Restaurant': 'Food & Drinks',
+  'Restaurant-Bar & Café': 'Food & Drinks',
+  'Restaurant-Bar & CafÃ©': 'Food & Drinks',
+  'Merchandise & Supplies-Groceries': 'Groceries',
+  'Merchandise & Supplies-Wholesale Stores': 'Groceries',
+  'Merchandise & Supplies-Pharmacies': 'Health & Wellness',
+  'Merchandise & Supplies-Clothing Stores': 'Shopping',
+  'Merchandise & Supplies-Electronics Stores': 'Shopping',
+  'Merchandise & Supplies-Department Stores': 'Shopping',
+  'Merchandise & Supplies-General Retail': 'Shopping',
+  'Travel-Airline': 'Travel',
+  'Entertainment-General Events': 'Entertainment',
+  'Entertainment-General Attractions': 'Entertainment',
+  'Entertainment-Other Entertainment': 'Entertainment',
+  'Business Services-Internet Services': 'Subscriptions',
+  'Business Services-Advertising Services': 'Efuture',
+  'Business Services-Other Services': 'Bills',
+  'Fees & Adjustments-Fees & Adjustments': 'Bills',
+  'Transportation-Fuel': 'Transport',
+  'Transportation-Parking Charges': 'Transport',
+  'Transportation-Tolls & Fees': 'Transport',
+  'Other-Education': 'Shopping',
+};
+
+export function mapAmexCategory(amexCategory: string): Category | null {
+  return AMEX_CATEGORY_MAP[amexCategory] ?? null;
+}
+
 const defaultMappings: Record<string, Category> = {
   starbucks: 'Food & Drinks',
   uber: 'Transport',

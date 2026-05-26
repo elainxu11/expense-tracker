@@ -68,7 +68,7 @@ export default function UploadPage() {
       const response = await fetch('/api/suggest-category', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merchant: transaction.merchant }),
+        body: JSON.stringify({ merchant: transaction.merchant, amexCategory: transaction.amexCategory }),
       });
       if (response.ok) {
         const data = await response.json();
@@ -120,16 +120,16 @@ export default function UploadPage() {
   if (step === 'select') {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold text-slate-900">Upload Statement</h1>
-        <p className="text-slate-600">Select your credit card to upload a statement</p>
-        <div className="grid grid-cols-2 gap-4">
+        <h1 className="text-4xl font-bold text-slate-900">Upload Statement</h1>
+        <p className="text-xl text-slate-700">Select your credit card to upload a statement</p>
+        <div className="grid grid-cols-2 gap-6">
           {CARD_TYPES.map((card) => (
             <button
               key={card.value}
               onClick={() => handleCardSelect(card.value)}
-              className="p-4 border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition text-left"
+              className="p-6 border-4 border-blue-400 rounded-xl hover:bg-blue-100 hover:border-blue-600 transition text-left bg-blue-50 shadow-lg"
             >
-              <div className="font-medium text-slate-900">{card.label}</div>
+              <div className="font-bold text-2xl text-blue-900">{card.label}</div>
             </button>
           ))}
         </div>
@@ -140,13 +140,13 @@ export default function UploadPage() {
   if (step === 'upload') {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold text-slate-900">Upload CSV</h1>
-        <p className="text-slate-600">
+        <h1 className="text-4xl font-bold text-slate-900">Upload CSV</h1>
+        <p className="text-xl text-slate-700">
           Upload your {CARD_TYPES.find((c) => c.value === selectedCard)?.label} statement
         </p>
-        <div className="border-2 border-dashed border-slate-300 rounded-lg p-12 text-center">
-          <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-          <p className="text-slate-600 mb-4">Drag and drop your CSV file here</p>
+        <div className="border-4 border-dashed border-blue-400 rounded-2xl p-16 text-center bg-blue-50">
+          <Upload className="w-16 h-16 text-blue-600 mx-auto mb-4" />
+          <p className="text-2xl font-bold text-blue-900 mb-6">Drag and drop your CSV file here</p>
           <input
             type="file"
             accept=".csv"
@@ -156,13 +156,13 @@ export default function UploadPage() {
           />
           <label
             htmlFor="csv-upload"
-            className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700"
+            className="inline-block px-8 py-4 bg-blue-600 text-white rounded-xl cursor-pointer hover:bg-blue-700 font-bold text-lg"
           >
             Choose File
           </label>
         </div>
-        {error && <div className="p-4 bg-red-50 text-red-700 rounded-lg">{error}</div>}
-        {loading && <div className="p-4 bg-blue-50 text-blue-700 rounded-lg">Parsing CSV...</div>}
+        {error && <div className="p-6 bg-red-100 text-red-900 rounded-xl border-4 border-red-300 font-semibold text-lg">{error}</div>}
+        {loading && <div className="p-6 bg-blue-100 text-blue-900 rounded-xl border-4 border-blue-300 font-semibold text-lg">Parsing CSV...</div>}
       </div>
     );
   }
@@ -172,32 +172,32 @@ export default function UploadPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-slate-900">Categorize Transactions</h1>
-          <p className="text-slate-600">
+          <h1 className="text-4xl font-bold text-slate-900">Categorize Transactions</h1>
+          <p className="text-2xl font-bold text-blue-600 bg-blue-100 px-4 py-2 rounded-lg">
             {currentIndex + 1} of {transactions.length}
           </p>
         </div>
 
-        <div className="bg-white rounded-lg p-6 border border-slate-200 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="bg-blue-50 rounded-xl p-8 border-4 border-blue-300 space-y-6">
+          <div className="grid grid-cols-2 gap-6">
             <div>
-              <p className="text-sm text-slate-600">Date</p>
-              <p className="font-medium text-slate-900">{tx.date}</p>
+              <p className="text-lg font-bold text-slate-700">Date</p>
+              <p className="text-2xl font-bold text-slate-900">{tx.date}</p>
             </div>
             <div>
-              <p className="text-sm text-slate-600">Amount</p>
-              <p className="font-medium text-slate-900">${tx.amount.toFixed(2)}</p>
+              <p className="text-lg font-bold text-slate-700">Amount</p>
+              <p className="text-2xl font-bold text-slate-900">${tx.amount.toFixed(2)}</p>
             </div>
             <div className="col-span-2">
-              <p className="text-sm text-slate-600">Merchant</p>
-              <p className="font-medium text-slate-900 text-lg">{tx.merchant}</p>
+              <p className="text-lg font-bold text-slate-700">Merchant</p>
+              <p className="text-3xl font-bold text-slate-900">{tx.merchant}</p>
             </div>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <p className="text-sm font-medium text-slate-700">Select Category:</p>
-          <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-4">
+          <p className="text-xl font-bold text-slate-900">Select Category:</p>
+          <div className="grid grid-cols-2 gap-3">
             {[
               'Bills',
               'Food & Drinks',
@@ -217,15 +217,15 @@ export default function UploadPage() {
               <button
                 key={cat}
                 onClick={() => handleCategorize(cat as Category)}
-                className={`p-3 rounded-lg border transition ${
+                className={`p-4 rounded-lg border-3 transition font-semibold text-lg ${
                   suggestedCategory === cat
-                    ? 'bg-blue-50 border-blue-300'
-                    : 'border-slate-200 hover:bg-slate-50'
+                    ? 'bg-green-100 border-green-500 text-green-900'
+                    : 'bg-white border-gray-300 text-slate-900 hover:bg-gray-100 hover:border-blue-400'
                 }`}
               >
-                <p className="text-sm font-medium text-slate-900">{cat}</p>
+                <p>{cat}</p>
                 {suggestedCategory === cat && (
-                  <p className="text-xs text-blue-600">Recommended</p>
+                  <p className="text-xs font-bold text-green-700 mt-1">✓ Recommended</p>
                 )}
               </button>
             ))}
@@ -236,21 +236,22 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="space-y-6 text-center">
-      <h1 className="text-3xl font-bold text-slate-900">Upload Complete!</h1>
-      <p className="text-slate-600 text-lg">
-        {categorized.length} transactions categorized and saved
-      </p>
+    <div className="space-y-8 text-center">
+      <div className="bg-green-50 rounded-2xl p-12 border-4 border-green-300">
+        <h1 className="text-5xl font-bold text-green-900 mb-4">✓ Upload Complete!</h1>
+        <p className="text-2xl font-bold text-green-800">
+          {categorized.length} transactions categorized and saved
+        </p>
+      </div>
       <button
         onClick={() => {
           setStep('select');
           setSelectedCard('');
-          setCsvFile(null);
           setTransactions([]);
           setCategorized([]);
           setCurrentIndex(0);
         }}
-        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        className="px-10 py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold text-xl"
       >
         Upload Another Statement
       </button>

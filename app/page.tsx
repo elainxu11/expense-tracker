@@ -2,6 +2,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <h1 className="text-4xl font-bold text-slate-900">Dashboard</h1>
+
       <div className="grid grid-cols-3 gap-6">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border-2 border-blue-200 shadow">
           <p className="text-sm font-semibold text-blue-900 mb-2">Total Spent (This Month)</p>

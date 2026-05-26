@@ -39,4 +39,5 @@ export interface ParsedTransaction {
   merchant: string;
   amount: number;
   card: string;
+  amexCategory?: string;
 }

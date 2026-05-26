@@ -10,7 +10,7 @@ export function parseCSV(
 
   const transactions: ParsedTransaction[] = [];
 
-  // Skip header rows (usually first 1-2 rows depending on bank)
+  // Skip header row
   const dataRows = rows.slice(1);
 
   dataRows.forEach((row) => {
@@ -29,46 +29,53 @@ function parseRow(row: string[], cardType: string): ParsedTransaction | null {
   let date: string | null = null;
   let merchant: string | null = null;
   let amount: number | null = null;
+  let amexCategory: string | undefined;
 
-  // Generic parsing - most banks follow: date, description, amount pattern
   switch (cardType) {
     case 'amex':
-      // Amex: Date, Reference, Description, Amount
-      date = row[0]?.trim();
-      merchant = row[2]?.trim();
-      amount = parseAmount(row[3]);
+      // AMEX CSV columns (0-indexed):
+      // 0: Date (MM/DD/YYYY)
+      // 1: Description
+      // 2: Amount (positive = charge, negative = payment/credit)
+      // 3: Extended Details
+      // 4: Appears On Your Statement As
+      // 5: Address
+      // 6: City/State
+      // 7: Zip Code
+      // 8: Country
+      // 9: Reference
+      // 10: Category
+      date = parseAmexDate(row[0]?.trim() || '');
+      merchant = cleanAmexMerchantName(row[1]?.trim() || '');
+      amount = parseAmount(row[2]);
+      amexCategory = row[10]?.trim() || undefined;
       break;
 
     case 'capital-one':
-      // Capital One: Transaction Date, Posted Date, Merchant, Amount
       date = row[0]?.trim() || row[1]?.trim();
       merchant = row[2]?.trim();
       amount = parseAmount(row[3]);
       break;
 
     case 'discover':
-      // Discover: Trans. Date, Post Date, Merchant, Category, Amount, Pending
       date = row[1]?.trim() || row[0]?.trim();
       merchant = row[2]?.trim();
       amount = parseAmount(row[4]);
       break;
 
     case 'venmo':
-      // Venmo CSV: Date, Time, Type, Status, Note, From, To, Amount, Amount in
       date = row[0]?.trim();
       merchant = row[4]?.trim() || row[5]?.trim();
       amount = parseAmount(row[7]);
       break;
 
     case 'bofa':
-      // Bank of America: Date, Description, Amount
       date = row[0]?.trim();
       merchant = row[1]?.trim();
       amount = parseAmount(row[2]);
       break;
 
     default:
-      // Generic: try common positions
       date = row[0]?.trim();
       merchant = row[1]?.trim();
       amount = parseAmount(row[2]);
@@ -76,12 +83,37 @@ function parseRow(row: string[], cardType: string): ParsedTransaction | null {
 
   if (!date || !merchant || amount === null) return null;
 
-  return {
-    date: formatDate(date),
-    merchant: cleanMerchantName(merchant),
+  // AMEX: skip payments and credits (negative amounts)
+  if (cardType === 'amex' && amount <= 0) return null;
+
+  const result: ParsedTransaction = {
+    date: cardType === 'amex' ? date : formatDate(date),
+    merchant: cardType === 'amex' ? merchant : cleanMerchantName(merchant),
     amount: Math.abs(amount),
     card: cardType,
   };
+
+  if (amexCategory) result.amexCategory = amexCategory;
+
+  return result;
+}
+
+function parseAmexDate(dateStr: string): string {
+  // AMEX format: MM/DD/YYYY → YYYY-MM-DD
+  const parts = dateStr.split('/');
+  if (parts.length === 3) {
+    const [month, day, year] = parts;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  return formatDate(dateStr);
+}
+
+function cleanAmexMerchantName(raw: string): string {
+  return raw
+    .replace(/^AplPay\s+/i, '')   // Strip Apple Pay prefix
+    .replace(/\s{2,}.*$/, '')     // Strip trailing city/state (AMEX uses 2+ spaces as separator)
+    .replace(/^[A-Z]{2,4}\*/, '') // Strip payment processor codes (e.g. FGT*, TST*, FH*)
+    .trim();
 }
 
 function parseAmount(amountStr: string | undefined): number | null {
@@ -106,7 +138,7 @@ function formatDate(dateStr: string): string {
 
 function cleanMerchantName(merchant: string): string {
   return merchant
-    .replace(/^[A-Z0-9]+\s+/i, '') // Remove reference numbers
-    .replace(/\s+$/, '') // Trim trailing spaces
-    .split(' ')[0]; // Take first meaningful word
+    .replace(/^[A-Z0-9]+\s+/i, '')
+    .replace(/\s+$/, '')
+    .split(' ')[0];
 }
