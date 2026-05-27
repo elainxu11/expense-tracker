@@ -1,9 +1,9 @@
-import { suggestCategory, mapAmexCategory } from '@/lib/merchants';
+import { suggestCategory, mapSourceCategory } from '@/lib/merchants';
 import { getMerchantMapping } from '@/lib/googleSheets';
 
 export async function POST(request: Request) {
   try {
-    const { merchant, amexCategory } = await request.json();
+    const { merchant, sourceCategory } = await request.json();
 
     if (!merchant) {
       return Response.json(
@@ -12,14 +12,20 @@ export async function POST(request: Request) {
       );
     }
 
-    if (amexCategory) {
-      const mapped = mapAmexCategory(amexCategory);
+    const merchantMapping = await getMerchantMapping();
+
+    // Learned corrections take highest priority
+    const learned = merchantMapping[merchant.toLowerCase()];
+    if (learned) return Response.json({ category: learned });
+
+    // Then bank-provided source category
+    if (sourceCategory) {
+      const mapped = mapSourceCategory(sourceCategory);
       if (mapped) return Response.json({ category: mapped });
     }
 
-    const merchantMapping = await getMerchantMapping();
-    const category = await suggestCategory(merchant, merchantMapping);
-
+    // Fall back to default merchant name heuristics
+    const category = await suggestCategory(merchant);
     return Response.json({ category });
   } catch (error) {
     console.error('Category suggestion error:', error);

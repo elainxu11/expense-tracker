@@ -25,48 +25,95 @@ export function parseCSV(
   return transactions;
 }
 
+function isCardPayment(description: string): boolean {
+  const lower = description.toLowerCase();
+  return lower.includes('payment') || lower.includes('directpay') || lower.includes('autopay');
+}
+
 function parseRow(row: string[], cardType: string): ParsedTransaction | null {
   let date: string | null = null;
   let merchant: string | null = null;
   let amount: number | null = null;
-  let amexCategory: string | undefined;
+  let sourceCategory: string | undefined;
+  let address: string | undefined;
+  let txType: 'expense' | 'credit' = 'expense';
 
   switch (cardType) {
     case 'amex':
-      // AMEX CSV columns (0-indexed):
-      // 0: Date (MM/DD/YYYY)
-      // 1: Description
-      // 2: Amount (positive = charge, negative = payment/credit)
-      // 3: Extended Details
-      // 4: Appears On Your Statement As
-      // 5: Address
-      // 6: City/State
-      // 7: Zip Code
-      // 8: Country
-      // 9: Reference
-      // 10: Category
+      // Columns: Date(MM/DD/YYYY), Description, Amount, Extended Details,
+      // Appears On Statement, Address, City/State, Zip, Country, Reference, Category
+      // Positive = expense; negative = credit. Skip if negative AND a card payment.
       date = parseAmexDate(row[0]?.trim() || '');
       merchant = cleanAmexMerchantName(row[1]?.trim() || '');
       amount = parseAmount(row[2]);
-      amexCategory = row[10]?.trim() || undefined;
+      sourceCategory = row[10]?.trim() || undefined;
+      const amexAddr = row[5]?.trim();
+      const amexCity = row[6]?.trim();
+      if (amexAddr || amexCity) {
+        address = [amexAddr, amexCity].filter(Boolean).join(', ');
+      }
+      if (amount !== null && amount <= 0) {
+        if (isCardPayment(row[1]?.trim() || '')) return null;
+        txType = 'credit';
+      }
       break;
 
     case 'capital-one':
-      date = row[0]?.trim() || row[1]?.trim();
-      merchant = row[2]?.trim();
-      amount = parseAmount(row[3]);
+      // Columns: Transaction Date(YYYY-MM-DD), Posted Date, Card No.,
+      // Description, Category, Debit, Credit
+      if (!row[5]?.trim()) {
+        // No Debit value — check Credit column
+        if (!row[6]?.trim() || isCardPayment(row[3]?.trim() || '')) return null;
+        date = row[0]?.trim();
+        merchant = row[3]?.trim();
+        amount = parseAmount(row[6]);
+        sourceCategory = row[4]?.trim() || undefined;
+        txType = 'credit';
+        break;
+      }
+      date = row[0]?.trim();
+      merchant = row[3]?.trim();
+      amount = parseAmount(row[5]);
+      sourceCategory = row[4]?.trim() || undefined;
       break;
 
     case 'discover':
-      date = row[1]?.trim() || row[0]?.trim();
-      merchant = row[2]?.trim();
-      amount = parseAmount(row[4]);
+      // Columns: Trans. Date(MM/DD/YYYY), Post Date, Description, Amount, Category
+      // Positive = expense; negative = credit. Skip if negative AND a card payment.
+      date = parseAmexDate(row[0]?.trim() || '');
+      merchant = cleanDiscoverMerchantName(row[2]?.trim() || '');
+      amount = parseAmount(row[3]);
+      sourceCategory = row[4]?.trim() || undefined;
+      if (amount !== null && amount <= 0) {
+        if (isCardPayment(row[2]?.trim() || '')) return null;
+        txType = 'credit';
+      }
       break;
 
     case 'venmo':
-      date = row[0]?.trim();
-      merchant = row[4]?.trim() || row[5]?.trim();
-      amount = parseAmount(row[7]);
+      // Columns: (empty), ID, Datetime, Type, Status, Note, From, To, Amount (total), ...
+      // Type must be Payment or Charge; Status must be Complete.
+      // Negative = Elain paid (expense); positive = Elain received (credit — reimbursement).
+      if (row[3]?.trim() !== 'Payment' && row[3]?.trim() !== 'Charge') return null;
+      if (row[4]?.trim() !== 'Complete') return null;
+      date = row[2]?.trim().split('T')[0];
+      merchant = row[5]?.trim() || `${row[6]?.trim()} → ${row[7]?.trim()}`;
+      amount = parseAmount(row[8]);
+      if (amount !== null && amount >= 0) {
+        txType = 'credit';
+      }
+      break;
+
+    case 'wells-fargo':
+      // Columns: DATE(MM/DD/YYYY), DESCRIPTION, AMOUNT, CHECK#, STATUS
+      // Negative = expense; positive = payment/refund. Skip if positive AND a card payment.
+      date = parseAmexDate(row[0]?.trim() || '');
+      merchant = cleanWellsFargoMerchantName(row[1]?.trim() || '');
+      amount = parseAmount(row[2]);
+      if (amount !== null && amount >= 0) {
+        if (isCardPayment(row[1]?.trim() || '')) return null;
+        txType = 'credit';
+      }
       break;
 
     case 'bofa':
@@ -83,29 +130,47 @@ function parseRow(row: string[], cardType: string): ParsedTransaction | null {
 
   if (!date || !merchant || amount === null) return null;
 
-  // AMEX: skip payments and credits (negative amounts)
-  if (cardType === 'amex' && amount <= 0) return null;
+  const useRawDate = cardType === 'amex' || cardType === 'capital-one' || cardType === 'venmo' || cardType === 'wells-fargo' || cardType === 'discover';
+  const useRawMerchant = cardType === 'amex' || cardType === 'capital-one' || cardType === 'venmo' || cardType === 'wells-fargo' || cardType === 'discover';
 
   const result: ParsedTransaction = {
-    date: cardType === 'amex' ? date : formatDate(date),
-    merchant: cardType === 'amex' ? merchant : cleanMerchantName(merchant),
+    date: useRawDate ? date : formatDate(date),
+    merchant: useRawMerchant ? merchant : cleanMerchantName(merchant),
     amount: Math.abs(amount),
     card: cardType,
+    type: txType,
   };
 
-  if (amexCategory) result.amexCategory = amexCategory;
+  if (sourceCategory) result.sourceCategory = sourceCategory;
+  if (address) result.address = address;
 
   return result;
 }
 
 function parseAmexDate(dateStr: string): string {
-  // AMEX format: MM/DD/YYYY → YYYY-MM-DD
+  // MM/DD/YYYY → YYYY-MM-DD
   const parts = dateStr.split('/');
   if (parts.length === 3) {
     const [month, day, year] = parts;
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
   return formatDate(dateStr);
+}
+
+function cleanDiscoverMerchantName(raw: string): string {
+  return raw
+    .replace(/\*[A-Z0-9]+.*$/, '')          // Strip * + ref code + rest (AMAZON PRIME*RH9V54E23 ...)
+    .replace(/\/BILL.*$/, '')                // Strip /BILL suffix (APPLE.COM/BILL ...)
+    .replace(/\s+\d{3}-\d{3}-\d{4}.*$/, '') // Strip phone numbers and trailing junk
+    .replace(/\s+[A-Z0-9]{8,}$/, '')        // Strip any remaining trailing reference codes
+    .trim();
+}
+
+function cleanWellsFargoMerchantName(raw: string): string {
+  return raw
+    .replace(/\s+[A-Z]{2}$/, '') // Strip trailing state code (NY, HI, VA, etc.)
+    .replace(/\*\s*$/, '')        // Strip trailing * from processor codes
+    .trim();
 }
 
 function cleanAmexMerchantName(raw: string): string {

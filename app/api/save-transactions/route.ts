@@ -1,4 +1,4 @@
-import { appendTransactions, saveMerchantMapping } from '@/lib/googleSheets';
+import { appendTransactions, upsertMerchantMapping } from '@/lib/googleSheets';
 import { Transaction } from '@/lib/types';
 
 export async function POST(request: Request) {
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
     // Save merchant mappings
     for (const tx of transactions) {
-      await saveMerchantMapping(tx.merchant, tx.category);
+      await upsertMerchantMapping(tx.merchant, tx.category);
     }
 
     return Response.json({

@@ -1,18 +1,11 @@
-export type Category =
-  | 'Bills'
-  | 'Food & Drinks'
-  | 'Groceries'
-  | 'Unnecessary Purchases'
-  | 'Entertainment'
-  | 'Essentials'
-  | 'Shopping'
-  | 'Transport'
-  | 'Travel'
-  | 'Gifts'
-  | 'Investments'
-  | 'Health & Wellness'
-  | 'Efuture'
-  | 'Subscriptions';
+export type Category = string;
+
+export const DEFAULT_CATEGORIES: string[] = [
+  'Bills', 'Food & Drinks', 'Groceries', 'Unnecessary Purchases',
+  'Entertainment', 'Essentials', 'Shopping', 'Transport', 'Travel',
+  'Gifts', 'Investments', 'Health & Wellness', 'Efuture', 'Subscriptions',
+  'Reimbursements',
+];
 
 export interface Transaction {
   id: string;
@@ -23,6 +16,7 @@ export interface Transaction {
   category: Category;
   month: string;
   year: string;
+  type: 'expense' | 'credit';
 }
 
 export interface IncomeEntry {
@@ -39,5 +33,7 @@ export interface ParsedTransaction {
   merchant: string;
   amount: number;
   card: string;
-  amexCategory?: string;
+  type: 'expense' | 'credit';
+  sourceCategory?: string;
+  address?: string;
 }

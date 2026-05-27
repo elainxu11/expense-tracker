@@ -37,6 +37,7 @@ export default function RootLayout({
               <Link href="/upload" className="text-white hover:text-blue-100 text-sm font-semibold">Upload</Link>
               <Link href="/transactions" className="text-white hover:text-blue-100 text-sm font-semibold">Transactions</Link>
               <Link href="/income" className="text-white hover:text-blue-100 text-sm font-semibold">Income</Link>
+              <Link href="/settings" className="text-white hover:text-blue-100 text-sm font-semibold">Settings</Link>
             </div>
           </div>
         </nav>

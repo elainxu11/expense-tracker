@@ -1,6 +1,8 @@
 import { Category } from './types';
 
-const AMEX_CATEGORY_MAP: Record<string, Category> = {
+// Unified map for bank-provided category strings (AMEX and Capital One)
+const SOURCE_CATEGORY_MAP: Record<string, Category> = {
+  // AMEX
   'Restaurant-Restaurant': 'Food & Drinks',
   'Restaurant-Bar & Café': 'Food & Drinks',
   'Restaurant-Bar & CafÃ©': 'Food & Drinks',
@@ -23,10 +25,24 @@ const AMEX_CATEGORY_MAP: Record<string, Category> = {
   'Transportation-Parking Charges': 'Transport',
   'Transportation-Tolls & Fees': 'Transport',
   'Other-Education': 'Shopping',
+  // Capital One ("Other Travel" and "Other Services" omitted — too ambiguous, fall back to merchant name)
+  'Dining': 'Food & Drinks',
+  'Groceries': 'Groceries',
+  'Health Care': 'Health & Wellness',
+  'Merchandise': 'Shopping',
+  'Car Rental': 'Travel',
+  'Entertainment': 'Entertainment',
+  'Fee/Interest Charge': 'Bills',
+  // Discover
+  'Restaurants': 'Food & Drinks',
+  'Supermarkets': 'Groceries',
+  'Gas & Automotive': 'Transport',
+  'Health & Beauty': 'Health & Wellness',
+  'Travel': 'Travel',
 };
 
-export function mapAmexCategory(amexCategory: string): Category | null {
-  return AMEX_CATEGORY_MAP[amexCategory] ?? null;
+export function mapSourceCategory(sourceCategory: string): Category | null {
+  return SOURCE_CATEGORY_MAP[sourceCategory] ?? null;
 }
 
 const defaultMappings: Record<string, Category> = {
@@ -95,4 +111,5 @@ export const CATEGORIES: Category[] = [
   'Health & Wellness',
   'Efuture',
   'Subscriptions',
+  'Reimbursements',
 ];

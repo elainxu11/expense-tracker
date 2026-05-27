@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Upload, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Upload } from 'lucide-react';
 import { ParsedTransaction, Transaction, Category } from '@/lib/types';
 
 const CARD_TYPES = [
@@ -9,8 +9,27 @@ const CARD_TYPES = [
   { value: 'capital-one', label: 'Capital One Venture X' },
   { value: 'discover', label: 'Discover' },
   { value: 'venmo', label: 'Venmo' },
+  { value: 'wells-fargo', label: 'Wells Fargo Autograph' },
   { value: 'bofa', label: 'Bank of America' },
   { value: 'other', label: 'Other / Miscellaneous' },
+];
+
+const ALL_CATEGORIES: Category[] = [
+  'Bills',
+  'Food & Drinks',
+  'Groceries',
+  'Unnecessary Purchases',
+  'Entertainment',
+  'Essentials',
+  'Shopping',
+  'Transport',
+  'Travel',
+  'Gifts',
+  'Investments',
+  'Health & Wellness',
+  'Efuture',
+  'Subscriptions',
+  'Reimbursements',
 ];
 
 export default function UploadPage() {
@@ -18,13 +37,23 @@ export default function UploadPage() {
     'select'
   );
   const [selectedCard, setSelectedCard] = useState<string>('');
-  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
   const [categorized, setCategorized] = useState<Transaction[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [suggestedCategory, setSuggestedCategory] = useState<Category | null>(null);
+  const correctionsRef = useRef<Record<string, Category>>({});
+  const loadGenRef = useRef(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+
+  useEffect(() => {
+    if (step !== 'categorize' || !suggestedCategory) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') handleCategorize(suggestedCategory);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [step, suggestedCategory]);
 
   const handleCardSelect = (cardType: string) => {
     setSelectedCard(cardType);
@@ -35,7 +64,6 @@ export default function UploadPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setCsvFile(file);
     setLoading(true);
     setError('');
 
@@ -64,23 +92,46 @@ export default function UploadPage() {
   };
 
   const loadSuggestedCategory = async (transaction: ParsedTransaction) => {
+    const gen = ++loadGenRef.current;
+
+    if (transaction.type === 'credit') {
+      setSuggestedCategory('Reimbursements');
+      return;
+    }
+    const key = transaction.merchant.toLowerCase();
+    const localCorrection = correctionsRef.current[key];
+    if (localCorrection) {
+      setSuggestedCategory(localCorrection);
+      return;
+    }
     try {
       const response = await fetch('/api/suggest-category', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merchant: transaction.merchant, amexCategory: transaction.amexCategory }),
+        body: JSON.stringify({ merchant: transaction.merchant, sourceCategory: transaction.sourceCategory }),
       });
-      if (response.ok) {
+      if (response.ok && gen === loadGenRef.current) {
         const data = await response.json();
         setSuggestedCategory(data.category);
       }
     } catch {
-      setSuggestedCategory('Shopping');
+      if (gen === loadGenRef.current) setSuggestedCategory('Shopping');
     }
   };
 
   const handleCategorize = async (category: Category) => {
     const tx = transactions[currentIndex];
+
+    // Save correction when user overrides the suggestion
+    if (suggestedCategory && category !== suggestedCategory && tx.type !== 'credit') {
+      correctionsRef.current = { ...correctionsRef.current, [tx.merchant.toLowerCase()]: category };
+      fetch('/api/save-merchant-mapping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ merchant: tx.merchant, category }),
+      }).catch(() => {});
+    }
+
     const categorized_tx: Transaction = {
       id: `${Date.now()}-${currentIndex}`,
       ...tx,
@@ -89,31 +140,27 @@ export default function UploadPage() {
       year: new Date(tx.date).getFullYear().toString(),
     };
 
-    setCategorized([...categorized, categorized_tx]);
+    const allCategorized = [...categorized, categorized_tx];
+    setCategorized(allCategorized);
 
     if (currentIndex < transactions.length - 1) {
       setCurrentIndex(currentIndex + 1);
       await loadSuggestedCategory(transactions[currentIndex + 1]);
     } else {
+      setLoading(true);
+      try {
+        const response = await fetch('/api/save-transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactions: allCategorized }),
+        });
+        if (!response.ok) throw new Error('Failed to save');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to save transactions');
+      } finally {
+        setLoading(false);
+      }
       setStep('complete');
-    }
-  };
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/save-transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactions: categorized }),
-      });
-
-      if (!response.ok) throw new Error('Failed to save transactions');
-      setStep('complete');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -169,6 +216,8 @@ export default function UploadPage() {
 
   if (step === 'categorize') {
     const tx = transactions[currentIndex];
+    const isCredit = tx.type === 'credit';
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -178,7 +227,12 @@ export default function UploadPage() {
           </p>
         </div>
 
-        <div className="bg-blue-50 rounded-xl p-8 border-4 border-blue-300 space-y-6">
+        <div className={`rounded-xl p-8 border-4 space-y-6 ${isCredit ? 'bg-green-50 border-green-300' : 'bg-blue-50 border-blue-300'}`}>
+          {isCredit && (
+            <div className="inline-block px-3 py-1 bg-green-200 text-green-800 rounded-full text-sm font-bold">
+              + Credit / Reimbursement
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-6">
             <div>
               <p className="text-lg font-bold text-slate-700">Date</p>
@@ -186,38 +240,43 @@ export default function UploadPage() {
             </div>
             <div>
               <p className="text-lg font-bold text-slate-700">Amount</p>
-              <p className="text-2xl font-bold text-slate-900">${tx.amount.toFixed(2)}</p>
+              <p className={`text-2xl font-bold ${isCredit ? 'text-green-700' : 'text-slate-900'}`}>
+                {isCredit ? '+' : '-'}${tx.amount.toFixed(2)}
+              </p>
             </div>
             <div className="col-span-2">
               <p className="text-lg font-bold text-slate-700">Merchant</p>
               <p className="text-3xl font-bold text-slate-900">{tx.merchant}</p>
             </div>
+            <div>
+              <p className="text-lg font-bold text-slate-700">Card</p>
+              <p className="text-xl font-semibold text-slate-800">
+                {CARD_TYPES.find((c) => c.value === tx.card)?.label ?? tx.card}
+              </p>
+            </div>
+            {tx.sourceCategory && (
+              <div>
+                <p className="text-lg font-bold text-slate-700">Bank Category</p>
+                <p className="text-xl font-semibold text-slate-800">{tx.sourceCategory}</p>
+              </div>
+            )}
+            {tx.address && (
+              <div className="col-span-2">
+                <p className="text-lg font-bold text-slate-700">Address</p>
+                <p className="text-xl font-semibold text-slate-800">{tx.address}</p>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="space-y-4">
           <p className="text-xl font-bold text-slate-900">Select Category:</p>
           <div className="grid grid-cols-2 gap-3">
-            {[
-              'Bills',
-              'Food & Drinks',
-              'Groceries',
-              'Unnecessary Purchases',
-              'Entertainment',
-              'Essentials',
-              'Shopping',
-              'Transport',
-              'Travel',
-              'Gifts',
-              'Investments',
-              'Health & Wellness',
-              'Efuture',
-              'Subscriptions',
-            ].map((cat) => (
+            {ALL_CATEGORIES.map((cat) => (
               <button
                 key={cat}
                 onClick={() => handleCategorize(cat as Category)}
-                className={`p-4 rounded-lg border-3 transition font-semibold text-lg ${
+                className={`p-4 rounded-lg border-3 transition font-semibold text-lg focus:outline-none ${
                   suggestedCategory === cat
                     ? 'bg-green-100 border-green-500 text-green-900'
                     : 'bg-white border-gray-300 text-slate-900 hover:bg-gray-100 hover:border-blue-400'
@@ -235,13 +294,14 @@ export default function UploadPage() {
     );
   }
 
+  const creditCount = categorized.filter((t) => t.type === 'credit').length;
+  const expenseCount = categorized.length - creditCount;
+
   return (
     <div className="space-y-8 text-center">
       <div className="bg-green-50 rounded-2xl p-12 border-4 border-green-300">
         <h1 className="text-5xl font-bold text-green-900 mb-4">✓ Upload Complete!</h1>
-        <p className="text-2xl font-bold text-green-800">
-          {categorized.length} transactions categorized and saved
-        </p>
+        <p className="text-2xl font-bold text-green-800">{expenseCount} expenses · {creditCount} credits saved</p>
       </div>
       <button
         onClick={() => {
