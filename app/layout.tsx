@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Expense Tracker",
+  title: "Anchor",
   description: "Personal finance tracker",
 };
 
@@ -31,12 +31,15 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-white text-slate-900">
         <nav className="bg-blue-600 shadow-md">
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="text-2xl font-bold text-white">Ledger</div>
+            <div className="text-2xl font-bold text-white">Anchor</div>
             <div className="flex gap-8">
               <Link href="/" className="text-white hover:text-blue-100 text-sm font-semibold">Dashboard</Link>
               <Link href="/upload" className="text-white hover:text-blue-100 text-sm font-semibold">Upload</Link>
-              <Link href="/transactions" className="text-white hover:text-blue-100 text-sm font-semibold">Transactions</Link>
+              <Link href="/history" className="text-white hover:text-blue-100 text-sm font-semibold">History</Link>
+              <Link href="/coverage" className="text-white hover:text-blue-100 text-sm font-semibold">Coverage</Link>
               <Link href="/income" className="text-white hover:text-blue-100 text-sm font-semibold">Income</Link>
+              <Link href="/savings" className="text-white hover:text-blue-100 text-sm font-semibold">Savings</Link>
+              <Link href="/tax" className="text-white hover:text-blue-100 text-sm font-semibold">Tax</Link>
               <Link href="/settings" className="text-white hover:text-blue-100 text-sm font-semibold">Settings</Link>
             </div>
           </div>

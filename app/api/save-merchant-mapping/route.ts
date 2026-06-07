@@ -1,12 +1,13 @@
-import { upsertMerchantMapping } from '@/lib/googleSheets';
+import { upsertMerchantMapping, upsertDeductibleMapping } from '@/lib/googleSheets';
 
 export async function POST(request: Request) {
   try {
-    const { merchant, category } = await request.json();
-    if (!merchant || !category) {
-      return Response.json({ error: 'Missing merchant or category' }, { status: 400 });
+    const { merchant, category, deductible } = await request.json();
+    if (!merchant) {
+      return Response.json({ error: 'Missing merchant' }, { status: 400 });
     }
-    await upsertMerchantMapping(merchant, category);
+    if (category) await upsertMerchantMapping(merchant, category);
+    if (typeof deductible === 'boolean') await upsertDeductibleMapping(merchant, deductible);
     return Response.json({ success: true });
   } catch (error) {
     console.error('Save merchant mapping error:', error);

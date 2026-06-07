@@ -1,5 +1,6 @@
 import { getSettings, getTransactions } from '@/lib/googleSheets';
 import SettingsClient from './_components/SettingsClient';
+import VendorRulesClient from './_components/VendorRulesClient';
 
 export default async function SettingsPage() {
   const [settings, transactions] = await Promise.all([
@@ -18,10 +19,13 @@ export default async function SettingsPage() {
     : [...new Set(transactions.map((t) => t.card).filter(Boolean))].sort();
 
   return (
-    <SettingsClient
-      initialCategories={settings.categories}
-      initialCards={cards}
-      categoryCounts={categoryCounts}
-    />
+    <div className="space-y-8">
+      <SettingsClient
+        initialCategories={settings.categories}
+        initialCards={cards}
+        categoryCounts={categoryCounts}
+      />
+      <VendorRulesClient />
+    </div>
   );
 }

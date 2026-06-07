@@ -1,37 +1,33 @@
 import { suggestCategory, mapSourceCategory } from '@/lib/merchants';
-import { getMerchantMapping } from '@/lib/googleSheets';
+import { getFullMerchantMapping } from '@/lib/googleSheets';
 
 export async function POST(request: Request) {
   try {
     const { merchant, sourceCategory } = await request.json();
 
     if (!merchant) {
-      return Response.json(
-        { error: 'Missing merchant' },
-        { status: 400 }
-      );
+      return Response.json({ error: 'Missing merchant' }, { status: 400 });
     }
 
-    const merchantMapping = await getMerchantMapping();
+    const { categories, deductible: deductibleMap } = await getFullMerchantMapping();
+    const key = merchant.toLowerCase();
+    const learnedDeductible = deductibleMap[key] ?? false;
 
-    // Learned corrections take highest priority
-    const learned = merchantMapping[merchant.toLowerCase()];
-    if (learned) return Response.json({ category: learned });
+    // Learned category corrections take highest priority
+    const learnedCategory = categories[key];
+    if (learnedCategory) return Response.json({ category: learnedCategory, deductible: learnedDeductible });
 
     // Then bank-provided source category
     if (sourceCategory) {
       const mapped = mapSourceCategory(sourceCategory);
-      if (mapped) return Response.json({ category: mapped });
+      if (mapped) return Response.json({ category: mapped, deductible: learnedDeductible });
     }
 
     // Fall back to default merchant name heuristics
     const category = await suggestCategory(merchant);
-    return Response.json({ category });
+    return Response.json({ category, deductible: learnedDeductible });
   } catch (error) {
     console.error('Category suggestion error:', error);
-    return Response.json(
-      { category: 'Shopping' },
-      { status: 200 }
-    );
+    return Response.json({ category: 'Shopping', deductible: false }, { status: 200 });
   }
 }

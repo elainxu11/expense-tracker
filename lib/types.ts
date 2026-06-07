@@ -17,15 +17,67 @@ export interface Transaction {
   month: string;
   year: string;
   type: 'expense' | 'credit';
+  deductible: boolean;
+  ignored?: boolean;
+  address?: string;
 }
 
 export interface IncomeEntry {
   id: string;
   date: string;
-  source: 'W2' | 'Efuture';
+  source: 'W2' | 'Efuture' | 'Credit';
   amount: number;
   month: string;
   year: string;
+  description?: string;
+}
+
+export type CheckingRowType =
+  | 'income_w2'
+  | 'income_efuture'
+  | 'credit'
+  | 'expense'
+  | 'savings'
+  | 'investment'
+  | 'exclude';
+
+export interface CheckingRow {
+  date: string;
+  description: string;
+  merchantName?: string; // cleaned payee name extracted from description
+  amount: number;       // absolute value
+  direction: 'in' | 'out';
+  rowType: CheckingRowType;
+  institution?: string; // for savings/investment rows
+  suggestedCategory?: string;
+  month: string;
+  year: string;
+}
+
+export interface SavingsEntry {
+  id: string;
+  date: string;
+  institution: string;
+  entryType: 'hy-savings' | 'investment';
+  amount: number;
+  month: string;
+  year: string;
+}
+
+export interface UploadSession {
+  id: string;
+  savedAt: string;
+  committedAt?: string;
+  committed?: boolean;
+  card: string;
+  cardLabel: string;
+  transactions: Transaction[];
+  expenseCount: number;
+  creditCount: number;
+  totalAmount: number;
+  sessionType?: 'checking';
+  incomeRows?: IncomeEntry[];
+  savingsRows?: SavingsEntry[];
 }
 
 export interface ParsedTransaction {
@@ -36,4 +88,10 @@ export interface ParsedTransaction {
   type: 'expense' | 'credit';
   sourceCategory?: string;
   address?: string;
+}
+
+export interface VendorRule {
+  pattern: string;
+  normalized: string;
+  matchType: 'prefix' | 'contains';
 }

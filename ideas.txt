@@ -1,0 +1,10 @@
+Things to task Claude
+
+- settings page; move around the the cats so that it shows up in that order on c page. (feature that allows user to modify the order they see the cats when prompted)
+- settings page; credit cards dont match 
+- what does ledger mean why is it at the top left of my page. get rid
+- settings; adding a new category doesnt make it show up on c page. 
+
+- expense budget on dashboard doesnt save when i change it
+- make a feature where i can see each of my trips and how much i spent there 
+- use credits -- subtract it from my expesnese - more accurate view of how much money I actually spent. 
