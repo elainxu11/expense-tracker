@@ -111,6 +111,24 @@ export default function TransactionList({
     }
   };
 
+  const handleRefundCategoryChange = async (tx: Transaction, newRefundCategory: string) => {
+    setSaving(tx.id);
+    try {
+      const res = await fetch('/api/update-transaction', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rowIndex: rowIndex(tx.id), refundCategory: newRefundCategory }),
+      });
+      if (!res.ok) throw new Error();
+      setTxs((prev) => prev.map((t) => t.id === tx.id ? { ...t, refundCategory: newRefundCategory || undefined } : t));
+      router.refresh();
+    } catch {
+      alert('Failed to update reimbursement category. Please try again.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -308,10 +326,13 @@ export default function TransactionList({
                   date={tx.date}
                   categories={categories}
                   saving={saving === tx.id}
+                  isCredit={tx.type === 'credit'}
+                  refundCategory={tx.refundCategory}
                   onCategoryChange={(cat) => handleCategoryChange(tx, cat)}
                   onDeductibleToggle={() => handleDeductibleToggle(tx)}
                   onIgnore={() => handleIgnore(tx)}
                   onDateChange={(date, month, year) => handleDateChange(tx, date, month, year)}
+                  onRefundCategoryChange={(cat) => handleRefundCategoryChange(tx, cat)}
                 />
               )}
             </div>

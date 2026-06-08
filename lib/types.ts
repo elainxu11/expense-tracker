@@ -1,5 +1,14 @@
 export type Category = string;
 
+export type BucketKey = 'Needs' | 'Wants' | 'Savings & Debt' | 'Unassigned';
+
+export const DEFAULT_BUCKET_MAPPING: Record<BucketKey, string[]> = {
+  Needs: ['Bills', 'Groceries', 'Essentials', 'Transport', 'Subscriptions', 'Health & Wellness'],
+  Wants: ['Food & Drinks', 'Unnecessary Purchases', 'Entertainment', 'Shopping', 'Travel', 'Gifts'],
+  'Savings & Debt': ['Investments', 'Efuture'],
+  Unassigned: [],
+};
+
 export const DEFAULT_CATEGORIES: string[] = [
   'Bills', 'Food & Drinks', 'Groceries', 'Unnecessary Purchases',
   'Entertainment', 'Essentials', 'Shopping', 'Transport', 'Travel',
@@ -20,6 +29,7 @@ export interface Transaction {
   deductible: boolean;
   ignored?: boolean;
   address?: string;
+  refundCategory?: string; // for credits: which expense category this offsets
 }
 
 export interface IncomeEntry {
@@ -93,5 +103,5 @@ export interface ParsedTransaction {
 export interface VendorRule {
   pattern: string;
   normalized: string;
-  matchType: 'prefix' | 'contains';
+  matchType: 'prefix' | 'contains' | 'contains-all';
 }

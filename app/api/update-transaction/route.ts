@@ -1,5 +1,5 @@
 import { revalidatePath } from 'next/cache';
-import { updateTransactionCategory, updateTransactionDeductible, updateTransactionIgnored, updateTransactionDate } from '@/lib/googleSheets';
+import { updateTransactionCategory, updateTransactionDeductible, updateTransactionIgnored, updateTransactionDate, updateTransactionRefundCategory } from '@/lib/googleSheets';
 
 export async function PUT(request: Request) {
   try {
@@ -19,6 +19,8 @@ export async function PUT(request: Request) {
     } else if ('date' in body) {
       if (!body.date || !body.month || !body.year) return Response.json({ error: 'Invalid request' }, { status: 400 });
       await updateTransactionDate(rowIndex, body.date, body.month, body.year);
+    } else if ('refundCategory' in body) {
+      await updateTransactionRefundCategory(rowIndex, body.refundCategory ?? '');
     } else {
       return Response.json({ error: 'Invalid request' }, { status: 400 });
     }

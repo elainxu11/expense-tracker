@@ -88,6 +88,24 @@ export default function CategoryTransactionList({ cardGroups, categories }: Prop
     }
   };
 
+  const handleRefundCategoryChange = async (tx: Transaction, newRefundCategory: string) => {
+    setSaving(tx.id);
+    try {
+      const res = await fetch('/api/update-transaction', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rowIndex: rowIndex(tx.id), refundCategory: newRefundCategory }),
+      });
+      if (!res.ok) throw new Error();
+      setTxMap((prev) => ({ ...prev, [tx.id]: { ...prev[tx.id], refundCategory: newRefundCategory || undefined } }));
+      router.refresh();
+    } catch {
+      alert('Failed to update reimbursement category.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const handleIgnore = async (tx: Transaction) => {
     setSaving(tx.id);
     try {
@@ -114,9 +132,9 @@ export default function CategoryTransactionList({ cardGroups, categories }: Prop
     <div className="space-y-6">
       {cardGroups.map(({ card, label, txs }) => {
         const liveTxs = txs.map((t) => txMap[t.id] ?? t);
-        const liveTotal = liveTxs
-          .filter((t) => t.type === 'expense')
-          .reduce((s, t) => s + t.amount, 0);
+        const liveExpenses = liveTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+        const liveCredits = liveTxs.filter((t) => t.type === 'credit' && t.refundCategory).reduce((s, t) => s + t.amount, 0);
+        const liveTotal = liveExpenses - liveCredits;
 
         const isCollapsed = !!collapsed[card];
 
@@ -137,7 +155,9 @@ export default function CategoryTransactionList({ cardGroups, categories }: Prop
                 <span className="text-sm text-slate-400">
                   {liveTxs.length} transaction{liveTxs.length !== 1 ? 's' : ''}
                 </span>
-                <span className="font-bold text-slate-900">${liveTotal.toFixed(2)}</span>
+                <span className={`font-bold ${liveTotal < 0 ? 'text-green-600' : 'text-slate-900'}`}>
+                  {liveTotal < 0 ? '-' : ''}${Math.abs(liveTotal).toFixed(2)}
+                </span>
                 <span className="text-slate-400 text-sm">{isCollapsed ? '▶' : '▼'}</span>
               </div>
             </button>
@@ -173,10 +193,13 @@ export default function CategoryTransactionList({ cardGroups, categories }: Prop
                         date={tx.date}
                         categories={categories}
                         saving={saving === tx.id}
+                        isCredit={tx.type === 'credit'}
+                        refundCategory={tx.refundCategory}
                         onCategoryChange={(cat) => handleCategoryChange(tx, cat)}
                         onDeductibleToggle={() => handleDeductibleToggle(tx)}
                         onIgnore={() => handleIgnore(tx)}
                         onDateChange={(date, month, year) => handleDateChange(tx, date, month, year)}
+                        onRefundCategoryChange={(cat) => handleRefundCategoryChange(tx, cat)}
                       />
                     </div>
                   </div>

@@ -66,6 +66,24 @@ export default function MerchantTransactionList({
     }
   };
 
+  const handleRefundCategoryChange = async (tx: Transaction, newRefundCategory: string) => {
+    setSaving(tx.id);
+    try {
+      const res = await fetch('/api/update-transaction', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rowIndex: rowIndex(tx.id), refundCategory: newRefundCategory }),
+      });
+      if (!res.ok) throw new Error();
+      setTxs((prev) => prev.map((t) => (t.id === tx.id ? { ...t, refundCategory: newRefundCategory || undefined } : t)));
+      router.refresh();
+    } catch {
+      alert('Failed to update reimbursement category. Please try again.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const handleDeductibleToggle = async (tx: Transaction) => {
     const next = !tx.deductible;
     setSaving(tx.id);
@@ -179,6 +197,9 @@ export default function MerchantTransactionList({
                   {CARD_LABELS[tx.card] ?? tx.card}
                 </Link>
                 {' · '}{tx.category}
+                {tx.type === 'credit' && tx.refundCategory && (
+                  <span className="ml-1.5 text-green-600 font-medium">→ offsets {tx.refundCategory}</span>
+                )}
                 {tx.deductible && (
                   <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 inline-block">
                     Business
@@ -201,10 +222,13 @@ export default function MerchantTransactionList({
                 date={tx.date}
                 categories={categories}
                 saving={saving === tx.id}
+                isCredit={tx.type === 'credit'}
+                refundCategory={tx.refundCategory}
                 onCategoryChange={(cat) => handleCategoryChange(tx, cat)}
                 onDeductibleToggle={() => handleDeductibleToggle(tx)}
                 onIgnore={() => handleIgnore(tx)}
                 onDateChange={(date, month, year) => handleDateChange(tx, date, month, year)}
+                onRefundCategoryChange={(cat) => handleRefundCategoryChange(tx, cat)}
               />
             </div>
           </div>

@@ -238,7 +238,7 @@ export default function UploadPage() {
     const gen = ++loadGenRef.current;
 
     if (transaction.type === 'credit') {
-      setSuggestedCategory('Reimbursements');
+      setSuggestedCategory(null); // user must explicitly pick which expense category this offsets
       return;
     }
     const normalizedMerchant = applyVendorRules(transaction.merchant, vendorRules);
@@ -343,10 +343,41 @@ export default function UploadPage() {
       id: `${Date.now()}-${indexAtStart}`,
       ...tx,
       merchant: normalizedMerchant,
-      category,
+      category: tx.type === 'credit' ? 'Reimbursements' : category,
+      ...(tx.type === 'credit' ? { refundCategory: category } : {}),
       month: tx.date.split('-')[1],
       year: tx.date.split('-')[0],
       deductible,
+    };
+
+    const allCategorized = [...categorized, categorized_tx];
+    setCategorized(allCategorized);
+    setDeductible(false);
+
+    if (indexAtStart < transactions.length - 1) {
+      setCurrentIndex(indexAtStart + 1);
+      categorizingRef.current = false;
+      await loadSuggestedCategory(transactions[indexAtStart + 1]);
+    } else {
+      await saveSessionToHistory(allCategorized);
+    }
+  };
+
+  const handleSkipRefundCategory = async () => {
+    if (categorizingRef.current) return;
+    categorizingRef.current = true;
+    const indexAtStart = currentIndex;
+    const tx = transactions[indexAtStart];
+    const normalizedMerchant = applyVendorRules(tx.merchant, vendorRules);
+
+    const categorized_tx: Transaction = {
+      id: `${Date.now()}-${indexAtStart}`,
+      ...tx,
+      merchant: normalizedMerchant,
+      category: 'Reimbursements',
+      month: tx.date.split('-')[1],
+      year: tx.date.split('-')[0],
+      deductible: false,
     };
 
     const allCategorized = [...categorized, categorized_tx];
@@ -587,40 +618,82 @@ export default function UploadPage() {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <p className="text-sm font-bold text-slate-600 uppercase tracking-wide">Select Category:</p>
-          <div className="grid grid-cols-3 gap-1.5">
-            {categories.map((cat) => {
-              const isHighlighted = hoveredCat === cat || (!hoveredCat && suggestedCategory === cat);
-              return (
-                <button
-                  key={cat}
-                  onClick={() => handleCategorize(cat as Category)}
-                  onMouseEnter={() => setHoveredCat(cat)}
-                  onMouseLeave={() => setHoveredCat(null)}
-                  className={`px-2 py-1.5 rounded-lg border-2 transition font-semibold text-xs text-left focus:outline-none ${
-                    isHighlighted
-                      ? 'bg-green-100 border-green-500 text-green-900'
-                      : 'bg-white border-gray-200 text-slate-800 hover:bg-gray-100 hover:border-blue-400'
-                  }`}
-                >
-                  {cat}{isHighlighted && <span className="ml-1 text-green-600">✓</span>}
-                </button>
-              );
-            })}
+        {isCredit ? (
+          <div className="space-y-3">
+            <p className="text-sm font-bold text-green-700 uppercase tracking-wide">Which expense category does this credit apply to?</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {categories.map((cat) => {
+                const isHighlighted = hoveredCat === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => handleCategorize(cat as Category)}
+                    onMouseEnter={() => setHoveredCat(cat)}
+                    onMouseLeave={() => setHoveredCat(null)}
+                    className={`px-2 py-1.5 rounded-lg border-2 transition font-semibold text-xs text-left focus:outline-none ${
+                      isHighlighted
+                        ? 'bg-green-100 border-green-500 text-green-900'
+                        : 'bg-white border-gray-200 text-slate-800 hover:bg-gray-100 hover:border-green-400'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="border-t border-slate-200 pt-3 flex items-center gap-4">
+              <button
+                onClick={handleSkipRefundCategory}
+                className="px-5 py-2 rounded-lg border-2 border-slate-300 bg-white text-slate-500 font-semibold text-sm hover:bg-slate-100 hover:border-slate-400 hover:text-slate-700 transition"
+              >
+                General refund — no specific category
+              </button>
+              <button
+                onClick={handleIgnore}
+                className="px-4 py-2 rounded-lg border-2 border-red-200 bg-white text-red-400 font-semibold text-sm hover:bg-red-50 hover:text-red-600 transition"
+              >
+                Ignore
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <p className="text-sm font-bold text-slate-600 uppercase tracking-wide">Select Category:</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {categories.map((cat) => {
+                  const isHighlighted = hoveredCat === cat || (!hoveredCat && suggestedCategory === cat);
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => handleCategorize(cat as Category)}
+                      onMouseEnter={() => setHoveredCat(cat)}
+                      onMouseLeave={() => setHoveredCat(null)}
+                      className={`px-2 py-1.5 rounded-lg border-2 transition font-semibold text-xs text-left focus:outline-none ${
+                        isHighlighted
+                          ? 'bg-green-100 border-green-500 text-green-900'
+                          : 'bg-white border-gray-200 text-slate-800 hover:bg-gray-100 hover:border-blue-400'
+                      }`}
+                    >
+                      {cat}{isHighlighted && <span className="ml-1 text-green-600">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-        <div className="border-t border-slate-200 pt-4">
-          <button
-            onClick={handleIgnore}
-            className="px-5 py-2 rounded-lg border-2 border-slate-300 bg-white text-slate-500 font-semibold text-sm hover:bg-slate-100 hover:border-slate-400 hover:text-slate-700 transition"
-            title="Skip this transaction — it won't appear in dashboards or Google Sheets"
-          >
-            Ignore transaction
-          </button>
-          <p className="mt-1.5 text-xs text-slate-400">Hidden from dashboards and Sheets. You can un-ignore later from History.</p>
-        </div>
+            <div className="border-t border-slate-200 pt-4">
+              <button
+                onClick={handleIgnore}
+                className="px-5 py-2 rounded-lg border-2 border-slate-300 bg-white text-slate-500 font-semibold text-sm hover:bg-slate-100 hover:border-slate-400 hover:text-slate-700 transition"
+                title="Skip this transaction — it won't appear in dashboards or Google Sheets"
+              >
+                Ignore transaction
+              </button>
+              <p className="mt-1.5 text-xs text-slate-400">Hidden from dashboards and Sheets. You can un-ignore later from History.</p>
+            </div>
+          </>
+        )}
 
         {currentIndex > 0 && (
           <button

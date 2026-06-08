@@ -120,6 +120,24 @@ export default function RecentTransactions({
     }
   };
 
+  const handleRefundCategoryChange = async (tx: Transaction, newRefundCategory: string) => {
+    setSaving(tx.id);
+    try {
+      const res = await fetch('/api/update-transaction', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rowIndex: rowIndex(tx.id), refundCategory: newRefundCategory }),
+      });
+      if (!res.ok) throw new Error();
+      setTxs((prev) => prev.map((t) => t.id === tx.id ? { ...t, refundCategory: newRefundCategory || undefined } : t));
+      router.refresh();
+    } catch {
+      alert('Failed to update reimbursement category. Please try again.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl border-2 border-slate-200 p-6 shadow-sm self-start">
       <div className="flex items-center justify-between mb-4">
@@ -196,10 +214,13 @@ export default function RecentTransactions({
                 date={tx.date}
                 categories={categories}
                 saving={saving === tx.id}
+                isCredit={tx.type === 'credit'}
+                refundCategory={tx.refundCategory}
                 onCategoryChange={(cat) => handleCategoryChange(tx, cat)}
                 onDeductibleToggle={() => handleDeductibleToggle(tx)}
                 onIgnore={() => handleIgnore(tx)}
                 onDateChange={(date, month, year) => handleDateChange(tx, date, month, year)}
+                onRefundCategoryChange={(cat) => handleRefundCategoryChange(tx, cat)}
               />
             </div>
           </div>

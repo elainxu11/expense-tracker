@@ -6,8 +6,9 @@ import { VendorRule } from '@/lib/types';
 export default function VendorRulesClient() {
   const [rules, setRules] = useState<VendorRule[]>([]);
   const [pattern, setPattern] = useState('');
+  const [pattern2, setPattern2] = useState('');
   const [normalized, setNormalized] = useState('');
-  const [matchType, setMatchType] = useState<'prefix' | 'contains'>('prefix');
+  const [matchType, setMatchType] = useState<'prefix' | 'contains' | 'contains-all'>('prefix');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,20 +21,23 @@ export default function VendorRulesClient() {
 
   const handleAdd = async () => {
     const pat = pattern.trim();
+    const pat2 = pattern2.trim();
     const norm = normalized.trim();
     if (!pat || !norm) return;
+    if (matchType === 'contains-all' && !pat2) return;
+    const storedPattern = matchType === 'contains-all' ? `${pat}|${pat2}` : pat;
     setSaving(true);
     setError('');
     try {
       const res = await fetch('/api/vendor-rules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pattern: pat, normalized: norm, matchType }),
+        body: JSON.stringify({ pattern: storedPattern, normalized: norm, matchType }),
       });
       if (!res.ok) throw new Error('Failed to save');
       setRules((prev) => {
-        const existing = prev.findIndex((r) => r.pattern.toLowerCase() === pat.toLowerCase());
-        const next = { pattern: pat, normalized: norm, matchType };
+        const existing = prev.findIndex((r) => r.pattern.toLowerCase() === storedPattern.toLowerCase());
+        const next = { pattern: storedPattern, normalized: norm, matchType };
         if (existing >= 0) {
           const updated = [...prev];
           updated[existing] = next;
@@ -42,6 +46,7 @@ export default function VendorRulesClient() {
         return [...prev, next];
       });
       setPattern('');
+      setPattern2('');
       setNormalized('');
     } catch {
       setError('Failed to save rule');
@@ -80,10 +85,21 @@ export default function VendorRulesClient() {
         {rules.map((rule) => (
           <div key={rule.pattern} className="flex items-center justify-between px-4 py-2.5 bg-slate-50 rounded-lg gap-3">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="font-mono text-sm text-slate-700 truncate">{rule.pattern}</span>
-              <span className="text-slate-400 text-xs shrink-0">
-                {rule.matchType === 'prefix' ? 'starts with' : 'contains'}
-              </span>
+              {rule.matchType === 'contains-all' ? (
+                <>
+                  <span className="font-mono text-sm text-slate-700 truncate">{rule.pattern.split('|')[0]}</span>
+                  <span className="text-slate-400 text-xs shrink-0">AND</span>
+                  <span className="font-mono text-sm text-slate-700 truncate">{rule.pattern.split('|')[1]}</span>
+                  <span className="text-slate-400 text-xs shrink-0">contains all</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-mono text-sm text-slate-700 truncate">{rule.pattern}</span>
+                  <span className="text-slate-400 text-xs shrink-0">
+                    {rule.matchType === 'prefix' ? 'starts with' : 'contains'}
+                  </span>
+                </>
+              )}
               <span className="text-slate-400 shrink-0">→</span>
               <span className="font-semibold text-sm text-slate-900 truncate">{rule.normalized}</span>
             </div>
@@ -101,16 +117,30 @@ export default function VendorRulesClient() {
         <div className="flex gap-2">
           <div className="flex-1">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1 block">
-              Pattern (what to match)
+              {matchType === 'contains-all' ? 'Word 1' : 'Pattern (what to match)'}
             </label>
             <input
               value={pattern}
               onChange={(e) => setPattern(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-              placeholder="e.g. EMPOWER*"
+              placeholder={matchType === 'contains-all' ? 'e.g. EMPOWER' : 'e.g. EMPOWER*'}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-400"
             />
           </div>
+          {matchType === 'contains-all' && (
+            <div className="flex-1">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1 block">
+                Word 2
+              </label>
+              <input
+                value={pattern2}
+                onChange={(e) => setPattern2(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                placeholder="e.g. AHMED"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+              />
+            </div>
+          )}
           <div className="flex-1">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1 block">
               Normalized name
@@ -129,17 +159,21 @@ export default function VendorRulesClient() {
             </label>
             <select
               value={matchType}
-              onChange={(e) => setMatchType(e.target.value as 'prefix' | 'contains')}
+              onChange={(e) => {
+                setMatchType(e.target.value as 'prefix' | 'contains' | 'contains-all');
+                setPattern2('');
+              }}
               className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-blue-400 bg-white"
             >
               <option value="prefix">Starts with</option>
               <option value="contains">Contains</option>
+              <option value="contains-all">Contains all (AND)</option>
             </select>
           </div>
         </div>
         <button
           onClick={handleAdd}
-          disabled={saving || !pattern.trim() || !normalized.trim()}
+          disabled={saving || !pattern.trim() || !normalized.trim() || (matchType === 'contains-all' && !pattern2.trim())}
           className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition"
         >
           Add Rule

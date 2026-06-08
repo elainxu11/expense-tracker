@@ -41,6 +41,8 @@ export default function HistoryPage() {
   const [openMenu, setOpenMenu] = useState<{ sessionId: string; txIndex: number } | null>(null);
   const [togglingDeductible, setTogglingDeductible] = useState<{ sessionId: string; txIndex: number } | null>(null);
   const [togglingIgnored, setTogglingIgnored] = useState<{ sessionId: string; txIndex: number } | null>(null);
+  const [editingRefundCat, setEditingRefundCat] = useState<{ sessionId: string; txIndex: number } | null>(null);
+  const [editingDate, setEditingDate] = useState<{ sessionId: string; txIndex: number; value: string } | null>(null);
 
   useEffect(() => {
     fetchSessions();
@@ -254,6 +256,40 @@ export default function HistoryPage() {
     }
   }
 
+  async function handleRefundCategoryChange(sessionId: string, txIndex: number, refundCategory: string) {
+    setEditingRefundCat(null);
+    try {
+      const res = await fetch(`/api/upload-history/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update-refund-category', txIndex, refundCategory }),
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      const { session: updated } = await res.json();
+      setSessions((prev) => prev.map((s) => (s.id === sessionId ? updated : s)));
+    } catch {
+      alert('Failed to update reimbursement category. Please try again.');
+    }
+  }
+
+  async function handleDateChange(sessionId: string, txIndex: number, isoDate: string) {
+    setEditingDate(null);
+    const [y, m, d] = isoDate.split('-');
+    const date = `${m}/${d}/${y}`;
+    try {
+      const res = await fetch(`/api/upload-history/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update-date', txIndex, date, month: m, year: y }),
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      const { session: updated } = await res.json();
+      setSessions((prev) => prev.map((s) => (s.id === sessionId ? updated : s)));
+    } catch {
+      alert('Failed to update date. Please try again.');
+    }
+  }
+
   async function handleToggleIgnored(sessionId: string, txIndex: number) {
     setTogglingIgnored({ sessionId, txIndex });
     setOpenMenu(null);
@@ -291,8 +327,8 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6">
-      {(editingTx || openMenu) && (
-        <div className="fixed inset-0 z-10" onClick={() => { setEditingTx(null); setOpenMenu(null); }} />
+      {(editingTx || openMenu || editingRefundCat || editingDate) && (
+        <div className="fixed inset-0 z-10" onClick={() => { setEditingTx(null); setOpenMenu(null); setEditingRefundCat(null); setEditingDate(null); }} />
       )}
 
       {confirmRemoveLog && (
@@ -801,6 +837,35 @@ export default function HistoryPage() {
                                           <button
                                             onMouseDown={(e) => {
                                               e.preventDefault();
+                                              setOpenMenu(null);
+                                              const slash = tx.date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                                              const iso = slash
+                                                ? `${slash[3]}-${slash[1].padStart(2, '0')}-${slash[2].padStart(2, '0')}`
+                                                : tx.date;
+                                              setEditingDate({ sessionId: session.id, txIndex: i, value: iso });
+                                            }}
+                                            className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
+                                          >
+                                            Edit date
+                                          </button>
+                                          {tx.type === 'credit' && (
+                                            <button
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                setOpenMenu(null);
+                                                setEditingRefundCat({ sessionId: session.id, txIndex: i });
+                                              }}
+                                              className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 transition"
+                                            >
+                                              Edit reimbursement category
+                                              {tx.refundCategory && (
+                                                <span className="ml-1 text-xs text-green-500">({tx.refundCategory})</span>
+                                              )}
+                                            </button>
+                                          )}
+                                          <button
+                                            onMouseDown={(e) => {
+                                              e.preventDefault();
                                               handleToggleDeductible(session.id, i);
                                             }}
                                             disabled={togglingDeductible?.sessionId === session.id && togglingDeductible?.txIndex === i}
@@ -826,6 +891,74 @@ export default function HistoryPage() {
                                               ? 'Un-ignore transaction'
                                               : 'Ignore transaction'}
                                           </button>
+                                        </div>
+                                      )}
+                                      {editingRefundCat?.sessionId === session.id && editingRefundCat?.txIndex === i && (
+                                        <div className="absolute right-0 top-full mt-1 z-20 bg-white border-2 border-green-400 rounded-xl shadow-xl p-3 w-72">
+                                          <p className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-2">
+                                            Offsets which expense category?
+                                          </p>
+                                          <div className="flex flex-wrap gap-1.5 mb-2">
+                                            {categories.map((cat) => (
+                                              <button
+                                                key={cat}
+                                                onMouseDown={(e) => {
+                                                  e.preventDefault();
+                                                  handleRefundCategoryChange(session.id, i, cat);
+                                                }}
+                                                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition ${
+                                                  tx.refundCategory === cat
+                                                    ? 'bg-green-600 text-white'
+                                                    : 'bg-slate-100 text-slate-700 hover:bg-green-100 hover:text-green-800'
+                                                }`}
+                                              >
+                                                {cat}
+                                              </button>
+                                            ))}
+                                          </div>
+                                          <button
+                                            onMouseDown={(e) => {
+                                              e.preventDefault();
+                                              handleRefundCategoryChange(session.id, i, '');
+                                            }}
+                                            className="text-xs text-slate-400 hover:text-slate-600 transition"
+                                          >
+                                            Clear — general refund
+                                          </button>
+                                        </div>
+                                      )}
+                                      {editingDate?.sessionId === session.id && editingDate?.txIndex === i && (
+                                        <div className="absolute right-0 top-full mt-1 z-20 bg-white border-2 border-blue-400 rounded-xl shadow-xl p-4 w-64">
+                                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
+                                            Edit Date
+                                          </p>
+                                          <input
+                                            type="date"
+                                            value={editingDate.value}
+                                            onChange={(e) => setEditingDate({ ...editingDate, value: e.target.value })}
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-blue-400"
+                                          />
+                                          <div className="flex gap-2 mt-3">
+                                            <button
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                if (!editingDate.value) return;
+                                                handleDateChange(session.id, i, editingDate.value);
+                                              }}
+                                              className="flex-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
+                                            >
+                                              Save
+                                            </button>
+                                            <button
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                setEditingDate(null);
+                                              }}
+                                              className="flex-1 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-sm font-semibold hover:bg-slate-200 transition"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
                                         </div>
                                       )}
                                     </>

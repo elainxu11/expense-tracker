@@ -5,6 +5,8 @@ import {
   updateTransactionCategory,
   updateTransactionDeductible,
   updateTransactionIgnored,
+  updateTransactionRefundCategory,
+  updateTransactionDate,
   appendTransactions,
   batchUpsertMerchantMappings,
   deleteTransactionsByContent,
@@ -178,6 +180,40 @@ export async function PATCH(
       ...session,
       transactions: session.transactions.map((t, i) =>
         i === txIndex ? { ...t, ignored: newIgnored } : t
+      ),
+    };
+    await writeHistory(sessions);
+    return Response.json({ success: true, session: sessions[idx] });
+  }
+
+  if (body.action === 'update-refund-category') {
+    const { txIndex, refundCategory } = body as { txIndex: number; refundCategory: string };
+    const tx = session.transactions[txIndex];
+    if (session.committed && /^tx-\d+$/.test(tx.id)) {
+      const rowIndex = parseInt(tx.id.replace('tx-', ''), 10);
+      await updateTransactionRefundCategory(rowIndex, refundCategory);
+    }
+    sessions[idx] = {
+      ...session,
+      transactions: session.transactions.map((t, i) =>
+        i === txIndex ? { ...t, refundCategory: refundCategory || undefined } : t
+      ),
+    };
+    await writeHistory(sessions);
+    return Response.json({ success: true, session: sessions[idx] });
+  }
+
+  if (body.action === 'update-date') {
+    const { txIndex, date, month, year } = body as { txIndex: number; date: string; month: string; year: string };
+    const tx = session.transactions[txIndex];
+    if (session.committed && /^tx-\d+$/.test(tx.id)) {
+      const rowIndex = parseInt(tx.id.replace('tx-', ''), 10);
+      await updateTransactionDate(rowIndex, date, month, year);
+    }
+    sessions[idx] = {
+      ...session,
+      transactions: session.transactions.map((t, i) =>
+        i === txIndex ? { ...t, date } : t
       ),
     };
     await writeHistory(sessions);

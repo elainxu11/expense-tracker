@@ -24,11 +24,13 @@ export async function appendTransactions(
     t.year,
     t.type,
     t.deductible ? 'TRUE' : 'FALSE',
+    '',                        // J: ignored — never set at append time
+    t.refundCategory ?? '',    // K: refundCategory
   ]);
 
   const response = await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
-    range: 'Transactions!A:I',
+    range: 'Transactions!A:K',
     valueInputOption: 'USER_ENTERED',
     insertDataOption: 'INSERT_ROWS',
     requestBody: { values },
@@ -353,6 +355,20 @@ export async function updateTransactionIgnored(
   });
 }
 
+export async function updateTransactionRefundCategory(
+  rowIndex: number,
+  refundCategory: string
+): Promise<void> {
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID not set');
+  const sheetRow = rowIndex + 2;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `Transactions!K${sheetRow}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[refundCategory]] },
+  });
+}
+
 export async function updateTransactionDate(
   rowIndex: number,
   date: string,
@@ -484,7 +500,7 @@ export async function getTransactions(): Promise<Transaction[]> {
 
   try {
     const [txResponse, { deductible: deductibleMap }] = await Promise.all([
-      sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Transactions!A:J' }),
+      sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Transactions!A:K' }),
       getFullMerchantMapping(),
     ]);
 
@@ -496,6 +512,9 @@ export async function getTransactions(): Promise<Transaction[]> {
         if (row[9] === 'TRUE') return; // ignored — exclude from all views
         const explicitFlag = row[8] === 'TRUE';
         const merchantFlag = deductibleMap[String(row[1]).toLowerCase()] ?? false;
+        // Old-format rows stored refundCategory at row[8] (before deductible/ignored cols were added).
+        // Detect by: row[8] exists, is not a boolean flag, and row[10] is absent.
+        const refundCat = row[10] || (row[8] && row[8] !== 'TRUE' && row[8] !== 'FALSE' ? row[8] : '');
         transactions.push({
           id: `tx-${index}`,
           date: row[0],
@@ -507,6 +526,7 @@ export async function getTransactions(): Promise<Transaction[]> {
           year: row[6],
           type: (row[7] as 'expense' | 'credit') || 'expense',
           deductible: explicitFlag || merchantFlag,
+          ...(refundCat ? { refundCategory: refundCat } : {}),
         });
       }
     });
@@ -616,6 +636,84 @@ export async function saveBudget(budget: Record<string, number>): Promise<void> 
   });
 }
 
+export async function getDefaultBudget(year: string): Promise<Record<string, number>> {
+  if (!SHEET_ID) return DEFAULT_BUDGET;
+  try {
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Settings!D1' });
+    const raw = res.data.values?.[0]?.[0];
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      // Year-keyed format: { "2025": { cat: amt } }
+      if (parsed[year] && typeof parsed[year] === 'object') {
+        return parsed[year] as Record<string, number>;
+      }
+      // Old flat format (migration): values are numbers, not objects
+      const firstVal = Object.values(parsed)[0];
+      if (typeof firstVal === 'number') {
+        return parsed as Record<string, number>;
+      }
+    }
+  } catch {}
+  return DEFAULT_BUDGET;
+}
+
+export async function saveDefaultBudget(budget: Record<string, number>, year: string): Promise<void> {
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID not set');
+  await ensureSettingsSheet();
+
+  // Read current stored map so we preserve other years
+  let allYears: Record<string, Record<string, number>> = {};
+  try {
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Settings!D1' });
+    const raw = res.data.values?.[0]?.[0];
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      // Only carry over if already year-keyed (not old flat format)
+      const firstVal = Object.values(parsed)[0];
+      if (firstVal && typeof firstVal === 'object') {
+        allYears = parsed as Record<string, Record<string, number>>;
+      }
+    }
+  } catch {}
+
+  allYears[year] = budget;
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: 'Settings!D1',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[JSON.stringify(allYears)]] },
+  });
+}
+
+// ── Bucket Mapping ───────────────────────────────────────────────────────────
+// Sheet: Settings  Column: E1 = JSON mapping bucket -> category[]
+
+export type { BucketKey } from './types';
+export { DEFAULT_BUCKET_MAPPING } from './types';
+import { BucketKey, DEFAULT_BUCKET_MAPPING } from './types';
+
+export async function getBucketMapping(): Promise<Record<BucketKey, string[]>> {
+  if (!SHEET_ID) return DEFAULT_BUCKET_MAPPING;
+  try {
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: 'Settings!E1' });
+    const raw = res.data.values?.[0]?.[0];
+    if (raw) return { ...DEFAULT_BUCKET_MAPPING, ...JSON.parse(raw) };
+  } catch {}
+  return DEFAULT_BUCKET_MAPPING;
+}
+
+export async function saveBucketMapping(mapping: Record<BucketKey, string[]>): Promise<void> {
+  if (!SHEET_ID) throw new Error('GOOGLE_SHEET_ID not set');
+  await ensureSettingsSheet();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: 'Settings!E1',
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [[JSON.stringify(mapping)]] },
+  });
+}
+
 // ── Vendor Rules ─────────────────────────────────────────────────────────────
 // Sheet: Vendor_Rules  Columns: A=Pattern  B=Normalized  C=MatchType
 
@@ -630,7 +728,7 @@ export async function getVendorRules(): Promise<VendorRule[]> {
     return rows.slice(1).filter((r) => r[0] && r[1]).map((row) => ({
       pattern: row[0],
       normalized: row[1],
-      matchType: (row[2] === 'contains' ? 'contains' : 'prefix') as 'prefix' | 'contains',
+      matchType: (row[2] === 'contains' ? 'contains' : row[2] === 'contains-all' ? 'contains-all' : 'prefix') as 'prefix' | 'contains' | 'contains-all',
     }));
   } catch {
     return [];

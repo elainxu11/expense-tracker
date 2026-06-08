@@ -1,4 +1,4 @@
-import { getTransactions } from '@/lib/googleSheets';
+import { getTransactions, getSettings } from '@/lib/googleSheets';
 import Link from 'next/link';
 import MerchantTransactionList from '@/app/_components/MerchantTransactionList';
 
@@ -30,7 +30,7 @@ export default async function CardCreditsPage({
   const { name } = await params;
   const card = decodeURIComponent(name);
 
-  const all = await getTransactions();
+  const [all, settings] = await Promise.all([getTransactions(), getSettings()]);
   const credits = all
     .filter((t) => t.card === card && t.type === 'credit')
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -86,7 +86,7 @@ export default async function CardCreditsPage({
       )}
 
       {credits.length > 0 ? (
-        <MerchantTransactionList transactions={credits} />
+        <MerchantTransactionList transactions={credits} categories={settings.categories} />
       ) : (
         <div className="bg-white rounded-xl border-2 border-slate-200 p-8 text-center">
           <p className="text-slate-400 font-medium">No credits found for this card</p>

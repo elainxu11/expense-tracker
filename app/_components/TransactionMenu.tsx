@@ -9,10 +9,13 @@ interface Props {
   date: string;
   categories: string[];
   saving: boolean;
+  isCredit?: boolean;
+  refundCategory?: string;
   onCategoryChange: (category: string) => void;
   onDeductibleToggle: () => void;
   onIgnore: () => void;
   onDateChange: (date: string, month: string, year: string) => void;
+  onRefundCategoryChange?: (cat: string) => void;
 }
 
 function toInputDate(dateStr: string): string {
@@ -33,29 +36,34 @@ export default function TransactionMenu({
   date,
   categories,
   saving,
+  isCredit,
+  refundCategory,
   onCategoryChange,
   onDeductibleToggle,
   onIgnore,
   onDateChange,
+  onRefundCategoryChange,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [editingCat, setEditingCat] = useState(false);
+  const [editingRefundCat, setEditingRefundCat] = useState(false);
   const [editingDate, setEditingDate] = useState(false);
   const [dateInput, setDateInput] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open && !editingCat && !editingDate) return;
+    if (!open && !editingCat && !editingRefundCat && !editingDate) return;
     function handle(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
         setEditingCat(false);
+        setEditingRefundCat(false);
         setEditingDate(false);
       }
     }
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
-  }, [open, editingCat, editingDate]);
+  }, [open, editingCat, editingRefundCat, editingDate]);
 
   if (saving) {
     return (
@@ -69,6 +77,7 @@ export default function TransactionMenu({
         onClick={(e) => {
           e.stopPropagation();
           setEditingCat(false);
+          setEditingRefundCat(false);
           setEditingDate(false);
           setOpen((o) => !o);
         }}
@@ -90,6 +99,21 @@ export default function TransactionMenu({
           >
             Edit category
           </button>
+          {isCredit && onRefundCategoryChange && (
+            <button
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setOpen(false);
+                setEditingRefundCat(true);
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 transition"
+            >
+              Edit reimbursement category
+              {refundCategory && (
+                <span className="ml-1 text-xs text-green-500">({refundCategory})</span>
+              )}
+            </button>
+          )}
           <button
             onMouseDown={(e) => {
               e.preventDefault();
@@ -150,6 +174,43 @@ export default function TransactionMenu({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {editingRefundCat && (
+        <div className="absolute right-0 top-full mt-1 z-30 bg-white border-2 border-green-400 rounded-xl shadow-xl p-3 w-72">
+          <p className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-2">
+            Offsets which expense category?
+          </p>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onRefundCategoryChange?.(cat);
+                  setEditingRefundCat(false);
+                }}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition ${
+                  refundCategory === cat
+                    ? 'bg-green-600 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-green-100 hover:text-green-800'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onRefundCategoryChange?.('');
+              setEditingRefundCat(false);
+            }}
+            className="text-xs text-slate-400 hover:text-slate-600 transition"
+          >
+            Clear — general refund
+          </button>
         </div>
       )}
 

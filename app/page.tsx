@@ -1,12 +1,13 @@
 import Link from 'next/link';
-import { getTransactions, getVendorRules, getBudget, getIncome } from '@/lib/googleSheets';
-import { Transaction, VendorRule } from '@/lib/types';
+import { getTransactions, getVendorRules, getBudget, getIncome, getDefaultBudget, getBucketMapping } from '@/lib/googleSheets';
+import { Transaction, VendorRule, BucketKey } from '@/lib/types';
 import { applyVendorRules } from '@/lib/vendorRules';
 import MonthYearPicker from './_components/MonthYearPicker';
 import CategoryPieChart from './_components/CategoryPieChart';
 import RecentTransactions from './_components/RecentTransactions';
 import VendorList from './_components/VendorList';
 import MonthlyBreakdown from './_components/MonthlyBreakdown';
+import ActualSpendBuckets from './_components/ActualSpendBuckets';
 
 function sumExpenses(txs: Transaction[]) {
   return txs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
@@ -16,6 +17,11 @@ function groupByCategory(txs: Transaction[]): Record<string, number> {
   const grouped: Record<string, number> = {};
   for (const tx of txs.filter((t) => t.type === 'expense')) {
     grouped[tx.category] = (grouped[tx.category] || 0) + tx.amount;
+  }
+  // Subtract credits that have a refundCategory from that expense category
+  for (const tx of txs.filter((t) => t.type === 'credit' && t.refundCategory)) {
+    const cat = tx.refundCategory!;
+    grouped[cat] = (grouped[cat] || 0) - tx.amount;
   }
   return grouped;
 }
@@ -73,18 +79,21 @@ export default async function Dashboard({
 }: {
   searchParams: Promise<{ month?: string; year?: string; ytd?: string }>;
 }) {
-  const [transactions, vendorRules, budget, allIncome] = await Promise.all([
-    getTransactions(),
-    getVendorRules(),
-    getBudget(),
-    getIncome(),
-  ]);
   const { month, year, ytd } = await searchParams;
 
   const now = new Date();
   const isYTD = ytd !== 'false';
   const selectedMonth = month ?? String(now.getMonth() + 1).padStart(2, '0');
   const selectedYear = year ?? String(now.getFullYear());
+
+  const [transactions, vendorRules, budget, allIncome, defaultBudget, bucketMapping] = await Promise.all([
+    getTransactions(),
+    getVendorRules(),
+    getBudget(),
+    getIncome(),
+    getDefaultBudget(selectedYear),
+    getBucketMapping(),
+  ]);
 
   // income keyed by month "01".."12" for the selected year
   const incomeByMonth: Record<string, number> = {};
@@ -105,7 +114,10 @@ export default async function Dashboard({
     .reduce((s, t) => s + t.amount, 0);
 
   const byCategory = groupByCategory(filtered);
+  // Sort all categories; negatives (credit-only categories) go at the end
   const sortedCategories = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+  // Pie chart can't render negative slices — only include positive net values
+  const pieData = sortedCategories.filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }));
 
   const byMerchant = groupByMerchant(filtered, vendorRules);
   const sortedMerchants = Object.entries(byMerchant).sort((a, b) => b[1] - a[1]);
@@ -118,6 +130,14 @@ export default async function Dashboard({
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const periodLabel = isYTD ? `${selectedYear} Year to Date` : 'This Month';
+
+  const incomeForPeriod = isYTD
+    ? allIncome
+        .filter((e) => e.year === selectedYear && e.source !== 'Credit')
+        .reduce((s, e) => s + e.amount, 0) || null
+    : allIncome
+        .filter((e) => e.year === selectedYear && e.month === selectedMonth && e.source !== 'Credit')
+        .reduce((s, e) => s + e.amount, 0) || null;
 
   return (
     <div className="space-y-8">
@@ -191,7 +211,7 @@ export default async function Dashboard({
       {/* Pie chart + By Category side by side */}
       <div className="grid grid-cols-2 gap-6 items-start">
         <CategoryPieChart
-          data={sortedCategories.map(([name, value]) => ({ name, value }))}
+          data={pieData}
         />
         {sortedCategories.length > 0 ? (
           <div className="bg-white rounded-xl border-2 border-slate-200 p-6 shadow-sm">
@@ -205,7 +225,9 @@ export default async function Dashboard({
                   >
                     {cat}
                   </Link>
-                  <span className="font-bold text-slate-900">${total.toFixed(2)}</span>
+                  <span className={`font-bold ${total < 0 ? 'text-green-600' : 'text-slate-900'}`}>
+                    {total < 0 ? `+$${Math.abs(total).toFixed(2)} credit` : `$${total.toFixed(2)}`}
+                  </span>
                 </div>
               ))}
             </div>
@@ -221,8 +243,17 @@ export default async function Dashboard({
       <MonthlyBreakdown
         transactions={transactions}
         initialBudget={budget}
+        defaultBudget={defaultBudget}
         year={selectedYear}
         incomeByMonth={incomeByMonth}
+      />
+
+      {/* Budget breakdown */}
+      <ActualSpendBuckets
+        actualByCategory={byCategory}
+        mapping={bucketMapping as Record<BucketKey, string[]>}
+        incomeForPeriod={incomeForPeriod}
+        periodLabel={periodLabel}
       />
 
       {/* Vendor list, recent transactions, by card */}

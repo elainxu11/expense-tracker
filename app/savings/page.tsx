@@ -39,21 +39,40 @@ export default async function SavingsPage({
   const transactions = allTransactions.filter((t) => t.year === selectedYear);
 
   const totalIncome = income.filter((e) => e.source !== 'Credit').reduce((s, e) => s + e.amount, 0);
-  const totalCredits = income.filter((e) => e.source === 'Credit').reduce((s, e) => s + e.amount, 0);
-  const totalExpenses = transactions.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  // Credits deposited to checking (tax refunds, Zelle reimbursements, etc.)
+  const totalCheckingCredits = income.filter((e) => e.source === 'Credit').reduce((s, e) => s + e.amount, 0);
+  // Credits on credit card statements (refunds, chargebacks)
+  const totalCardCredits = transactions.filter((t) => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
+  const totalCredits = totalCheckingCredits + totalCardCredits;
+
+  // Investment transfers from checking land in Transactions with category='Investments', not the Savings sheet
+  const investmentTxs = transactions.filter((t) => t.type === 'expense' && t.category === 'Investments');
+  const totalInvestmentTxs = investmentTxs.reduce((s, t) => s + t.amount, 0);
+
+  // Expenses excluding investment transfers (which are shown as their own line)
+  const totalExpenses = transactions.filter((t) => t.type === 'expense' && t.category !== 'Investments').reduce((s, t) => s + t.amount, 0);
 
   const hySavings = savings.filter((s) => s.entryType === 'hy-savings');
-  const investments = savings.filter((s) => s.entryType === 'investment');
+  const savingsSheetInvestments = savings.filter((s) => s.entryType === 'investment');
 
   const totalHY = hySavings.reduce((s, e) => s + e.amount, 0);
-  const totalInvestments = investments.reduce((s, e) => s + e.amount, 0);
+  const totalSavingsInvestments = savingsSheetInvestments.reduce((s, e) => s + e.amount, 0);
+  const totalInvestments = totalInvestmentTxs + totalSavingsInvestments;
   const totalSaved = totalHY + totalInvestments;
 
-  // Net = income + credits - expenses - savings - investments
   const netCash = totalIncome + totalCredits - totalExpenses - totalSaved;
 
+  // Unified investment list: savings sheet entries + investment transactions from checking
+  const allInvestmentEntries = [
+    ...savingsSheetInvestments.map((e) => ({ date: e.date, label: e.institution, amount: e.amount, id: e.id })),
+    ...investmentTxs.map((t) => ({ date: t.date, label: t.merchant, amount: t.amount, id: t.id })),
+  ];
+
   const hyByInstitution = groupByInstitution(hySavings);
-  const invByInstitution = groupByInstitution(investments);
+  const invByInstitution: Record<string, number> = {};
+  for (const e of allInvestmentEntries) {
+    invByInstitution[e.label] = (invByInstitution[e.label] ?? 0) + e.amount;
+  }
 
   return (
     <div className="space-y-8">
@@ -137,7 +156,7 @@ export default async function SavingsPage({
             <span className="text-2xl font-bold text-purple-800">${totalInvestments.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </div>
 
-          {Object.entries(invByInstitution).length > 0 ? (
+          {allInvestmentEntries.length > 0 ? (
             <>
               <div className="space-y-2 mb-4">
                 {Object.entries(invByInstitution).sort((a, b) => b[1] - a[1]).map(([inst, amt]) => (
@@ -148,11 +167,11 @@ export default async function SavingsPage({
                 ))}
               </div>
               <div className="space-y-1.5 max-h-64 overflow-y-auto border-t border-slate-100 pt-3">
-                {[...investments].sort((a, b) => b.date.localeCompare(a.date)).map((e) => (
+                {[...allInvestmentEntries].sort((a, b) => b.date.localeCompare(a.date)).map((e) => (
                   <div key={e.id} className="flex items-center justify-between text-xs">
                     <div>
                       <span className="text-slate-400 mr-2">{e.date}</span>
-                      <span className="text-slate-600">{e.institution}</span>
+                      <span className="text-slate-600">{e.label}</span>
                     </div>
                     <span className="font-semibold text-purple-700">${e.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   </div>
